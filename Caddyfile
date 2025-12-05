@@ -1,0 +1,10 @@
+{
+    php_ini_path /app/php.ini
+}
+
+:8080
+
+route {
+    php_fastcgi localhost:9000
+    file_server
+}
