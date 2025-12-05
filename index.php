@@ -1,25 +1,30 @@
 <?php
-$conn = mysqli_connect(
+// =======================
+// KONEKSI DATABASE
+// =======================
 $host = "sql100.infinityfree.com";
 $user = "if0_40603152";
-$pass = "PAsurabaya";     
+$pass = "PAsurabaya";
 $db   = "if0_40603152_portal_pegawai";
-);
+
+$conn = mysqli_connect($host, $user, $pass, $db);
 
 if (!$conn) {
     die("Database connection failed: " . mysqli_connect_error());
 }
+
 date_default_timezone_set('Asia/Jakarta');
 header("User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 header("Connection: keep-alive");
+
 echo "OK running<br>";
 
-// ======================================
-// 🔹 Fungsi Kirim Pesan WhatsApp via Fonnte
-// ======================================
+// =======================
+// FUNGSI KIRIM WHATSAPP
+// =======================
 function sendWhatsapp($target, $message)
 {
-    $token = "bzAKGpqKAXWbWhBjsnQg"; // Ganti token Fonnte kamu
+    $token = "bzAKGpqKAXWbWhBjsnQg"; // Token Fonnte
 
     $curl = curl_init();
     curl_setopt_array($curl, array(
@@ -48,17 +53,23 @@ function sendWhatsapp($target, $message)
     }
 }
 
+// Log script dijalankan
 file_put_contents(__DIR__ . '/log_auto_send.txt', "[" . date('Y-m-d H:i:s') . "] Script dijalankan\n", FILE_APPEND);
 echo "[" . date('Y-m-d H:i:s') . "] Mengecek event...\n";
 
-// ======================================
-// 🔹 Ambil notifikasi aktif (belum semua dikirim)
-// ======================================
+// =======================
+// AMBIL NOTIFIKASI YANG BELUM DIKIRIM
+// =======================
 $query = "
-    SELECT id, title, body, event_start, target_type, department_id, sent_before_1d, sent_before_3h
+    SELECT id, title, body, event_start, target_type, department_id,
+           sent_before_1d, sent_before_3h, sent_before_30m
     FROM notifications
     WHERE type = 'pengumuman'
-    AND (sent_before_1d = 0 OR sent_before_3h = 0)
+    AND (
+        sent_before_1d = 0 OR
+        sent_before_3h = 0 OR
+        sent_before_30m = 0
+    )
     AND event_start > NOW()
     AND event_start < DATE_ADD(NOW(), INTERVAL 1 DAY)
 ";
@@ -82,7 +93,9 @@ while ($row = mysqli_fetch_assoc($result)) {
 
     $message = "🔔 *Pengumuman Penting*\n\n📌 {$title}\n\n{$body}\n\n🗓 *Tanggal:* {$tanggal}\n⏰ *Jam:* {$jam}";
 
-    // Tentukan daftar penerima
+    // ==========================
+    // AMBIL NOMOR TUJUAN
+    // ==========================
     $recipients = [];
 
     if ($target_type == 'all') {
@@ -97,7 +110,7 @@ while ($row = mysqli_fetch_assoc($result)) {
               AND phone_e164 IS NOT NULL 
               AND phone_e164 != ''
         ");
-    } else { // target_type = 'employee'
+    } else { // employee spesifik
         $recipientsQuery = mysqli_query($conn, "
             SELECT e.phone_e164
             FROM notification_recipients nr
@@ -113,44 +126,50 @@ while ($row = mysqli_fetch_assoc($result)) {
         if ($nomor) $recipients[] = $nomor;
     }
 
-    // Kirim Pesan 1 Hari Sebelum Event
+    // ==========================
+    // KIRIM 1 HARI SEBELUM
+    // ==========================
     if ($row['sent_before_1d'] == 0 && $now >= $event_time - 86400) {
-        echo "Mengirim pesan 1 hari sebelum event ID {$id} ke " . count($recipients) . " orang\n";
+        echo "Mengirim pesan 1 hari sebelum event ID {$id} ke " . count($recipients) . " orang<br>";
         foreach ($recipients as $nomor) {
             sendWhatsapp($nomor, $message);
         }
-        $conn->query("UPDATE notifications SET sent_before_1d = 1 WHERE id = {$id}");
+        mysqli_query($conn, "UPDATE notifications SET sent_before_1d = 1 WHERE id = {$id}");
     }
 
-    // Kirim Pesan 3 Jam Sebelum Event
+    // ==========================
+    // KIRIM 3 JAM SEBELUM
+    // ==========================
     if ($row['sent_before_3h'] == 0 && $now >= $event_time - 10800) {
-        echo "Mengirim pesan 3 jam sebelum event ID {$id} ke " . count($recipients) . " orang\n";
+        echo "Mengirim pesan 3 jam sebelum event ID {$id} ke " . count($recipients) . " orang<br>";
         foreach ($recipients as $nomor) {
             sendWhatsapp($nomor, $message);
         }
-        $conn->query("UPDATE notifications SET sent_before_3h = 1 WHERE id = {$id}");
-    }
-    // Kirim Pesan 30 Menit Sebelum Event
-    if ($row['sent_before_30m'] == 0 && $now >= $event_time - 1800) {
-        echo "Mengirim pesan 30 menit sebelum event ID {$id} ke " . count($recipients) . " orang\n";
-        foreach ($recipients as $nomor) {
-            sendWhatsapp($nomor, $message);
-        }
-        $conn->query("UPDATE notifications SET sent_before_30m = 1 WHERE id = {$id}");
+        mysqli_query($conn, "UPDATE notifications SET sent_before_3h = 1 WHERE id = {$id}");
     }
 
+    // ==========================
+    // KIRIM 30 MENIT SEBELUM
+    // ==========================
+    if ($row['sent_before_30m'] == 0 && $now >= $event_time - 1800) {
+        echo "Mengirim pesan 30 menit sebelum event ID {$id} ke " . count($recipients) . " orang<br>";
+        foreach ($recipients as $nomor) {
+            sendWhatsapp($nomor, $message);
+        }
+        mysqli_query($conn, "UPDATE notifications SET sent_before_30m = 1 WHERE id = {$id}");
+    }
+
+    // Jika semua sudah terkirim
     if (
         $row['sent_before_1d'] == 1 &&
         $row['sent_before_3h'] == 1 &&
         $row['sent_before_30m'] == 1
     ) {
-        $conn->query("UPDATE notifications SET sent = 1 WHERE id = {$id}");
+        mysqli_query($conn, "UPDATE notifications SET sent = 1 WHERE id = {$id}");
     }
-
-
 }
 
 $conn->close();
 
-echo "\n✅ Proses pengiriman selesai.";
+echo "\n<br>✅ Proses pengiriman selesai.";
 ?>
