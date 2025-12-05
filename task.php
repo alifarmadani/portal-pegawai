@@ -1,5 +1,14 @@
 <?php
-require_once __DIR__ . '/config/db.php';
+$conn = mysqli_connect(
+$host = "sql100.infinityfree.com";
+$user = "if0_40603152";
+$pass = "PAsurabaya";     
+$db   = "if0_40603152_portal_pegawai";
+);
+
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+}
 date_default_timezone_set('Asia/Jakarta');
 header("User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 header("Connection: keep-alive");
@@ -145,3 +154,4 @@ $conn->close();
 
 echo "\n✅ Proses pengiriman selesai.";
 ?>
+
